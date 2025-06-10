@@ -25,7 +25,7 @@ crm-dashboard/
 ├── dashboard.py        # Streamlit frontend
 ├── requirements.txt    # Python dependencies
 └── README.md           # Project documentation
-
+ 
 🚀 How It Works
 1. Backend (Flask API)
 The app.py defines API endpoints such as:
