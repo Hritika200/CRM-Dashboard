@@ -53,16 +53,15 @@ Clean navigation bar with custom CSS
 
 ✍️Pages:
    
-   Home: Welcome message and "Get Started" button
+   🔸Home: Welcome message and "Get Started" button
    
-   Add Customer: Form for submitting new customer info
+   🔸 Add Customer: Form for submitting new customer info
    
-   View Customers:See all customers in a table
+   🔸View Customers:See all customers in a table
    
-   Query Tables: Enter a table name to view contents dynamically
+   🔸Query Tables: Enter a table name to view contents dynamically
 
 🛠️ Setup Instructions
-✅ Prerequisites
-Python 3.8+
-MySQL installed and running
+Python 3.8+,
+MySQL installed and running,
 CRMDB database created in MySQL
