@@ -1,13 +1,13 @@
 💼 CRM Dashboard
 A basic Customer Relationship Management (CRM) dashboard built using:
 
-💠Python
+ 💠Python
 
-💠Flask API (backend)
+ 💠Flask API (backend)
 
-💠Streamlit (frontend UI)
+ 💠Streamlit (frontend UI)
 
-💠MySQL (database)
+ 💠MySQL (database)
 
 This website allows you to manage customer data, record vehicle sales, schedule follow-ups, and track interactions in a centralized interface.
 
