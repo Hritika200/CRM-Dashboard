@@ -217,21 +217,16 @@ def add_customer_to_db(name: str, email: str, phone: str, vehicle_id: Optional[i
                     WHERE vehicle_id = %s AND stock > 0
                 """, (vehicle_id,))
 
-                # Check remaining stock
-                cursor.execute("SELECT stock FROM Vehicle WHERE vehicle_id = %s", (vehicle_id,))
-                result = cursor.fetchone()
-                remaining_stock = result[0] if result else None
-
-                if remaining_stock is not None:
-                    if remaining_stock == 0:
-                        cursor.execute("""
-                            UPDATE Vehicle
-                            SET status = 'Sold'
-                            WHERE vehicle_id = %s
-                        """, (vehicle_id,))
-                        logger.info(f"✅ Vehicle {vehicle_id} status updated to 'Sold'")
-                else:
-                    logger.error(f"Could not retrieve stock for vehicle {vehicle_id}")
+                # Update status to 'Sold' where stock is 0 for that model/year
+                cursor.execute("""UPDATE Vehicle v
+                               JOIN (SELECT manufacturer, model, year FROM Vehicle
+                               GROUP BY manufacturer, model, year
+                               HAVING SUM(stock) <= 0) 
+                               AS depleted
+                               ON v.manufacturer = depleted.manufacturer
+                               AND v.model = depleted.model
+                               AND v.year = depleted.year
+                               SET v.status = 'Sold' """)
 
             # Insert customer
             if vehicle_id:
@@ -256,13 +251,21 @@ def add_customer_to_db(name: str, email: str, phone: str, vehicle_id: Optional[i
                     INSERT INTO Follow_ups (customer_id, follow_up_date, reason, completed)
                     VALUES (LAST_INSERT_ID(), NOW() + INTERVAL 3 DAY, 'Initial lead follow-up', FALSE)
                 """)
+            # Insert into Sales if vehicle was purchased
+            if vehicle_id:
+                cursor.execute("SELECT price FROM Vehicle WHERE vehicle_id = %s", (vehicle_id,))
+                result = cursor.fetchone()
+                if result:
+                    sale_amount = result[0]
+                    cursor.execute("""INSERT INTO Sales (customer_id, vehicle_id, sale_date, payment_status, sale_amount)
+                                   VALUES (LAST_INSERT_ID(), %s, NOW(), %s, %s)""", (vehicle_id, 'Completed', sale_amount))
 
             conn.commit()
             st.success("Customer added successfully!")
 
             if vehicle_id:
                 logger.info(f"Customer '{name}' added with vehicle ID {vehicle_id}")
-                st.experimental_rerun()
+                st.rerun()
 
             return True
 
@@ -291,78 +294,21 @@ def check_vehicle_availability(vehicle_id: int) -> bool:
         logger.error(f"Error checking vehicle availability: {e}")
         return False
 
-
-# --- Add this function to manually update vehicle status ---
 # def update_vehicle_status(vehicle_id: int, new_status: str) -> bool:
-#     """Manually update vehicle status"""
+#     """Manually update vehicle status in the database"""
 #     try:
 #         with get_db_connection() as conn:
 #             cursor = conn.cursor()
 #             cursor.execute(
-#                 "UPDATE Vehicle SET status = %s WHERE vehicle_id = %s", 
+#                 "UPDATE Vehicle SET status = %s WHERE vehicle_id = %s",
 #                 (new_status, vehicle_id)
 #             )
-#             conn.commit()
-            
-#             if cursor.rowcount > 0:
-#                 logger.info(f"Vehicle {vehicle_id} status updated to {new_status}")
-#                 return True
-#             else:
-#                 logger.warning(f"No rows updated for vehicle {vehicle_id}")
-#                 return False
+#             conn.commit()  # 🚨 This is crucial
+
+#             return cursor.rowcount > 0  # True if update succeeded
 #     except Exception as e:
 #         logger.error(f"Error updating vehicle status: {e}")
 #         return False
-
-def update_vehicle_status(vehicle_id: int, new_status: str) -> bool:
-    """Manually update vehicle status in the database"""
-    try:
-        with get_db_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE Vehicle SET status = %s WHERE vehicle_id = %s",
-                (new_status, vehicle_id)
-            )
-            conn.commit()  # 🚨 This is crucial
-
-            return cursor.rowcount > 0  # True if update succeeded
-    except Exception as e:
-        logger.error(f"Error updating vehicle status: {e}")
-        return False
-
-# --- Add this debug function to check vehicle updates ---
-# def debug_vehicle_sales():
-#     """Debug function to check vehicle-customer relationships"""
-#     try:
-#         with get_db_connection() as conn:
-#             cursor = conn.cursor()
-#             query = """
-#                 SELECT 
-#                     v.vehicle_id,
-#                     CONCAT(v.manufacturer, ' ', v.model) as vehicle,
-#                     v.status,
-#                     COUNT(c.customer_id) as customer_count,
-#                     GROUP_CONCAT(c.name) as customers
-#                 FROM Vehicle v
-#                 LEFT JOIN Customer c ON v.vehicle_id = c.vehicle_id
-#                 GROUP BY v.vehicle_id, v.manufacturer, v.model, v.status
-#                 ORDER BY v.vehicle_id
-#             """
-#             cursor.execute(query)
-#             results = cursor.fetchall()
-            
-#             st.subheader("🔍 Vehicle-Customer Debug Info")
-#             for row in results:
-#                 vehicle_id, vehicle, status, customer_count, customers = row
-#                 st.write(f"**Vehicle {vehicle_id}**: {vehicle}")
-#                 st.write(f"- Status: {status}")
-#                 st.write(f"- Customers: {customer_count}")
-#                 if customers:
-#                     st.write(f"- Customer Names: {customers}")
-#                 st.write("---")
-                
-#     except Exception as e:
-#         st.error(f"Debug error: {e}")
 
 def get_customers_with_vehicles() -> pd.DataFrame:
     """Retrieve all customers with their vehicle information"""
@@ -485,14 +431,12 @@ def initialize_tables():
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-
             # Disable foreign key checks temporarily to avoid constraint issues during truncation
             cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
 
             # Truncate tables in the correct order (children first due to FK constraints)
             # cursor.execute("TRUNCATE TABLE Sales")
             # cursor.execute("TRUNCATE TABLE Follow_ups")
-            # cursor.execute("TRUNCATE TABLE Interactions")
             # cursor.execute("TRUNCATE TABLE Vehicle")
             # cursor.execute("TRUNCATE TABLE Customer")
 
@@ -526,7 +470,6 @@ def initialize_tables():
                 INDEX idx_model (manufacturer, model)
             )
             """)
-
             #Insert sample vehicle data again
             vehicle_data = [
                 ("Ford", "Mustang", 2020, 2750000.00, "Available"),
@@ -586,7 +529,6 @@ def initialize_tables():
                 vehicle_id BIGINT NOT NULL,
                 sale_date DATE NOT NULL,
                 payment_status ENUM('Pending', 'Partial', 'Completed') DEFAULT 'Pending',
-                vin VARCHAR(50) UNIQUE,
                 sale_amount DECIMAL(12,2),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (customer_id) REFERENCES Customer(customer_id) ON DELETE CASCADE,
@@ -742,28 +684,28 @@ elif selected_page == "view":
 # --- Enhanced Vehicles Page (Replace the existing vehicles page section) ---
 elif selected_page == "vehicles":
     st.header("🚗 Vehicle Management")
-    
-    # Add debug toggle
-    # debug_mode = st.checkbox("🔧 Debug Mode", help="Show detailed vehicle-customer relationships")
-    
+
     try:
         with get_db_connection() as conn:
             # Display vehicle inventory with customer information
-            query = """
-                SELECT 
-                    v.vehicle_id,
-                    v.manufacturer,
-                    v.model,
-                    v.year,
-                    v.price,
-                    v.status,
-                    COUNT(c.customer_id) as customers_assigned,
-                    GROUP_CONCAT(c.name SEPARATOR ', ') as customer_names
-                FROM Vehicle v
-                LEFT JOIN Customer c ON v.vehicle_id = c.vehicle_id
-                GROUP BY v.vehicle_id, v.manufacturer, v.model, v.year, v.price, v.status
-                ORDER BY v.manufacturer, v.model, v.year
-            """
+            query = """SELECT
+            v.vehicle_id,
+            v.manufacturer,
+            v.model,
+            v.year,
+            v.price,
+            v.stock,
+            CASE 
+            WHEN v.stock <= 0 THEN 'Sold'
+            ELSE v.status
+            END AS status,
+            COUNT(c.customer_id) as customers_assigned,
+            GROUP_CONCAT(c.name SEPARATOR ', ') as customer_names
+            FROM Vehicle v
+            LEFT JOIN Customer c ON v.vehicle_id = c.vehicle_id
+            GROUP BY v.vehicle_id, v.manufacturer, v.model, v.year, v.price, v.stock, v.status
+            ORDER BY v.manufacturer, v.model, v.year"""
+
             df = pd.read_sql(query, conn)
             
             if not df.empty:
@@ -781,30 +723,16 @@ elif selected_page == "vehicles":
                     avg_price = df['price'].mean()
                     st.metric("Avg Price", f"₹{avg_price:,.0f}")
                 
-                # # Show debug info if enabled
-                # if debug_mode:
-                #     st.subheader("🔍 Debug Information")
-                #     debug_vehicle_sales()
-                
                 # Display vehicles with enhanced information
-                display_columns = {
-                    "vehicle_id": "ID",
-                    "manufacturer": "Make",
-                    "model": "Model",
-                    "year": "Year",
-                    "price": st.column_config.NumberColumn(
-                        "Price (₹)",
-                        format="₹%.0f"
-                    ),
-                    "status": st.column_config.SelectboxColumn(
-                        "Status",
-                        options=["Available", "Sold", "Reserved"]
-                    ),
-                    "customers_assigned": "Customers",
-                }
-                
-                # if debug_mode:
-                #     display_columns["customer_names"] = "Customer Names"
+                display_columns = {"vehicle_id": "ID",
+                                                      "manufacturer": "Make",
+                                                      "model": "Model",
+                                                      "year": "Year",
+                                                      "price": st.column_config.NumberColumn("Price (₹)",format="₹%.0f"),
+                                                      "stock": st.column_config.NumberColumn("Stock",format="%d"),
+                                                      "status": st.column_config.SelectboxColumn("Status", options=["Available", "Sold", "Reserved"]),
+                                                      "customers_assigned": "Customers",
+                                                      "customer_names": "customer_names"}
                 
                 st.dataframe(
                     df,
@@ -838,90 +766,6 @@ elif selected_page == "vehicles":
     except Exception as e:
      st.error(f"Error loading vehicle data: {e}")
      logger.error(f"Vehicle page error: {e}")
-
-elif selected_page == "vehicles":
-    st.header("🚗 Vehicle Management")
-
-    try:
-        with get_db_connection() as conn:
-            # Display vehicle inventory
-            query = """
-                SELECT 
-                    vehicle_id,
-                    manufacturer,
-                    model,
-                    year,
-                    price,
-                    status,
-                    (SELECT COUNT(*) FROM Customer WHERE vehicle_id = Vehicle.vehicle_id) as customers_assigned
-                FROM Vehicle 
-                ORDER BY manufacturer, model, year
-            """
-            df = pd.read_sql(query, conn)
-    except Exception as e:
-        st.error(f"Error loading vehicle data: {e}")
-        logger.error(f"Vehicle page error: {e}") 
-        
-    if not df.empty:
-                # Vehicle statistics
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Total Vehicles", len(df))
-                with col2:
-                    available_count = len(df[df['status'] == 'Available'])
-                    st.metric("Available", available_count)
-                with col3:
-                    sold_count = len(df[df['status'] == 'Sold'])
-                    st.metric("Sold", sold_count)
-                with col4:
-                    avg_price = df['price'].mean()
-                    st.metric("Avg Price", f"₹{avg_price:,.0f}")
-                
-                # Display vehicles
-                st.dataframe(
-                    df,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "vehicle_id": "ID",
-                        "manufacturer": "Make",
-                        "model": "Model",
-                        "year": "Year",
-                        "price": st.column_config.NumberColumn(
-                            "Price (₹)",
-                            format="₹%.0f"
-                        ),
-                        "status": st.column_config.SelectboxColumn(
-                            "Status",
-                            options=["Available", "Sold", "Reserved"]
-                        ),
-                        "customers_assigned": "Customers"
-                    }
-                )
-    else:
-        st.info("No vehicles in inventory")
-                # Manual status update section (REPLACEMENT)
-
-        st.subheader("🔧 Manual Status Update")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-                vehicle_ids = df['vehicle_id'].tolist()
-                vehicle_map = {f"{row['manufacturer']} {row['model']} ({row['year']}) - ID {row['vehicle_id']}": row['vehicle_id']
-                               for _, row in df.iterrows()}
-                selected_label = st.selectbox("Select Vehicle", list(vehicle_map.keys()))
-                selected_vehicle_id = vehicle_map[selected_label]
-        with col2:
-                new_status = st.selectbox("New Status", ["Available", "Sold", "Reserved"])
-        with col3:
-                if st.button("Update Status"):
-                    success = update_vehicle_status(selected_vehicle_id, new_status)
-                    if success:
-                        st.success(f"✅ Vehicle {selected_vehicle_id} status updated to {new_status}")
-                        st.experimental_rerun()
-                    else:
-                        st.error("❌ Failed to update vehicle status. Check if vehicle ID exists.")
-# except Exception as e:
-#         st.error(f"Error loading vehicle data: {e}")
 
 elif selected_page == "activities":
     st.header("📞 Customer Activities: Follow-Ups")
