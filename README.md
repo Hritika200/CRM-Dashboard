@@ -55,7 +55,7 @@ Clean navigation bar with custom CSS
    
    🔸Home: Welcome message and "Get Started" button
    
-   🔸 Add Customer: Form for submitting new customer info
+   🔸Add Customer: Form for submitting new customer info
    
    🔸View Customers:See all customers in a table
    
