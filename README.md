@@ -25,8 +25,11 @@ This website allows you to manage customer data, record vehicle sales, schedule 
 
 🧱 Project Structure
 bash
+
 Copy
+
 Edit
+
 crm-dashboard/
 │
 ├── app.py              # Flask backend API
