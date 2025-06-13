@@ -14,11 +14,14 @@ This website allows you to manage customer data, record vehicle sales, schedule 
 📌 Features
 
 ✅ Add new customers via a friendly Streamlit form
-✅ Automatically log customer interactions
-✅ Schedule a follow-up 3 days after a new customer is added
-✅ View all customer records and query any table from the CRMDB
-✅ API built with Flask, accessible for backend integrations
 
+✅ Automatically log customer interactions
+
+✅ Schedule a follow-up 3 days after a new customer is added
+
+✅ View all customer records and query any table from the CRMDB
+
+✅ API built with Flask, accessible for backend integrations
 
 🧱 Project Structure
 bash
