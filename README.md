@@ -36,32 +36,10 @@ crm-dashboard/
 ├── dashboard.py        # Streamlit frontend
 ├── requirements.txt    # Python dependencies
 └── README.md           # Project documentation
- 
-🚀 How It Works
-1. Backend (Flask API)
-The app.py defines API endpoints such as:
-POST /add_customer — adds a customer, logs an interaction, schedules a follow-up
-GET / — fetches all CRM table data
-
- Includes logic to:
-   1. Match vehicles using CONCAT(manufacturer, model)
-   2. Record sales in the Sales table with VIN and payment status
-   3. Update Vehicle.status to "Sold"
-
-2. Frontend (Streamlit UI)
-Clean navigation bar with custom CSS
-
-✍️Pages:
-   
-   🔸Home: Welcome message and "Get Started" button
-   
-   🔸Add Customer: Form for submitting new customer info
-   
-   🔸View Customers:See all customers in a table
-   
-   🔸Query Tables: Enter a table name to view contents dynamically
 
 🛠️ Setup Instructions
 Python 3.8+,
 MySQL installed and running,
 CRMDB database created in MySQL
+
+📝 Since a local database is used in this project the application will have issues in being deployed for that use cloud based databases and migrate the local database from MySQL, PostGRESQL to that cloud database platforms like Railway, Amazon RDS Free Tier, Aiven,etc.
