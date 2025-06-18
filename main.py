@@ -7,7 +7,13 @@ import requests
 import logging
 from contextlib import contextmanager
 from typing import Optional, List, Tuple
+from flask import Flask
 
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return 'Hello, Render!'
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
