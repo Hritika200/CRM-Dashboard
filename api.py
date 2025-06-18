@@ -6,6 +6,9 @@ from datetime import datetime, timedelta
 app = Flask(__name__)
 CORS(app)
 
+# @app.route('/')
+# def home():
+#     return 'Hello, Render!'
 # --- Database Connection ---
 def get_db_connection():
     return mysql.connector.connect(
